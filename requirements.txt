@@ -1,0 +1,7 @@
+garminconnect
+garth
+google-api-python-client
+google-auth
+google-auth-oauthlib
+openpyxl
+python-dotenv

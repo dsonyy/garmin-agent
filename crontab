@@ -1,0 +1,1 @@
+0 0 * * * cd /opt/garmin && /opt/garmin/.venv/bin/python main.py >> /var/log/garmin.log 2>&1
