@@ -101,12 +101,20 @@ def _extract_row(data: dict, target_date: date) -> list:
     bb = None
     if bb_list and isinstance(bb_list, list):
         for entry in bb_list:
-            if entry and entry.get("calendarDate") == d:
+            if entry and (entry.get("calendarDate") == d or entry.get("date") == d):
                 bb = entry
                 break
         if not bb:
             bb = bb_list[-1] if bb_list else None
     bb = bb or {}
+
+    bb_high = bb.get("bodyBatteryHighValue") or bb.get("highest")
+    bb_low = bb.get("bodyBatteryLowValue") or bb.get("lowest")
+    if not bb_high and bb.get("bodyBatteryValuesArray"):
+        vals = [v[1] for v in bb["bodyBatteryValuesArray"] if v and len(v) > 1 and v[1] is not None]
+        if vals:
+            bb_high = max(vals)
+            bb_low = min(vals)
 
     return [
         d,
@@ -137,8 +145,8 @@ def _extract_row(data: dict, target_date: date) -> list:
         stress.get("lowStressDuration"),
         stress.get("mediumStressDuration"),
         stress.get("highStressDuration"),
-        bb.get("bodyBatteryHighValue") or bb.get("highest"),
-        bb.get("bodyBatteryLowValue") or bb.get("lowest"),
+        bb_high,
+        bb_low,
         bb.get("charged"),
         bb.get("drained"),
         _safe_get(spo2, "averageSpO2") or _safe_get(spo2, "dailySpO2Values", "averageSpO2"),
@@ -164,6 +172,58 @@ def _extract_row(data: dict, target_date: date) -> list:
         fa.get("fitnessAge"),
         fa.get("chronologicalAge"),
     ]
+
+
+def _hm(seconds) -> str:
+    if not seconds:
+        return "N/A"
+    s = int(seconds)
+    return f"{s // 3600}h {(s % 3600) // 60}m"
+
+
+def _km(meters) -> str:
+    if not meters:
+        return "N/A"
+    return f"{meters / 1000:.1f} km"
+
+
+def format_summary(data: dict, target_date: date) -> str:
+    row = _extract_row(data, target_date)
+    v = dict(zip(COLUMNS, row))
+    weekday = target_date.strftime("%A")
+
+    steps = v["steps"] or 0
+    goal = v["step_goal"] or 0
+    pct = round(steps / goal * 100) if goal else 0
+
+    lines = [
+        f"Garmin {v['date']} ({weekday})",
+        "",
+        f"Steps: {steps:,} / {goal:,} ({pct}%)",
+        f"Distance: {_km(v['distance_m'])}",
+        f"Calories: {int(v['calories_total'] or 0)} ({int(v['calories_active'] or 0)} active)",
+        f"Floors: {int(v['floors_up'] or 0)} up / {int(v['floors_down'] or 0)} down",
+        "",
+        f"Resting HR: {v['resting_hr'] or 'N/A'} bpm",
+        f"HR range: {v['min_hr'] or '?'} - {v['max_hr'] or '?'} bpm",
+        f"HRV: {v['hrv_last_night'] or 'N/A'} ms (7d avg: {v['hrv_weekly_avg'] or 'N/A'})",
+        "",
+        f"Sleep: {_hm(v['sleep_seconds'])} (score: {v['sleep_score'] or 'N/A'})",
+        f"  Deep {_hm(v['deep_sleep_seconds'])} / Light {_hm(v['light_sleep_seconds'])} / REM {_hm(v['rem_sleep_seconds'])}",
+        "",
+        f"Stress: avg {v['avg_stress'] or 'N/A'} / max {v['max_stress'] or 'N/A'}",
+        f"Body Battery: {v['body_battery_low'] or '?'} - {v['body_battery_high'] or '?'} (+{v['body_battery_charged'] or '?'} / -{v['body_battery_drained'] or '?'})",
+        f"SpO2: {v['spo2_avg'] or 'N/A'}% (low: {v['spo2_lowest'] or 'N/A'}%)",
+    ]
+
+    if v["training_readiness"]:
+        lines.append(f"Training readiness: {v['training_readiness']} ({v['training_readiness_level'] or ''})")
+    if v["vo2max"]:
+        lines.append(f"VO2 Max: {v['vo2max']}")
+    if v["weight_kg"]:
+        lines.append(f"Weight: {v['weight_kg']:.1f} kg")
+
+    return "\n".join(lines)
 
 
 def append_to_excel(data: dict, target_date: date, output_dir: Path) -> Path:

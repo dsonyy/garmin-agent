@@ -9,7 +9,7 @@ load_dotenv()
 
 from garmin import init_garmin, collect_daily_data
 from gdrive import upload_to_drive
-from sheets import append_to_excel
+from sheets import append_to_excel, format_summary
 from telegram import send_message
 
 OUTPUT_DIR = Path(os.getenv("GARMIN_OUTPUT_DIR", str(Path(__file__).parent / "output")))
@@ -50,7 +50,7 @@ def main():
         except Exception as e:
             log.error(f"Google Drive upload failed: {e}")
 
-    send_message(f"Garmin report ready for {d}")
+    send_message(format_summary(data, target_date))
     log.info("Telegram notification sent")
 
 
