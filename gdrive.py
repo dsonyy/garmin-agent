@@ -52,6 +52,17 @@ def _find_existing_file(service, filename: str, folder_id: str) -> str | None:
     return files[0]["id"] if files else None
 
 
+def download_from_drive(filename: str, folder_id: str, local_path: Path | str) -> bool:
+    service = _get_service()
+    file_id = _find_existing_file(service, filename, folder_id)
+    if not file_id:
+        return False
+    content = service.files().get_media(fileId=file_id).execute()
+    Path(local_path).write_bytes(content)
+    log.info(f"Downloaded {filename} from Drive")
+    return True
+
+
 def upload_to_drive(file_path: Path | str, folder_id: str) -> str:
     file_path = Path(file_path)
     service = _get_service()

@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from garmin import init_garmin, collect_daily_data
-from gdrive import upload_to_drive
+from gdrive import upload_to_drive, download_from_drive
 from sheets import append_to_excel, format_summary
 from telegram import send_message
 
@@ -38,6 +38,14 @@ def main():
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, default=str, ensure_ascii=False)
     log.info(f"Saved JSON: {json_path}")
+
+    xlsx_name = f"{target_date.year}-garmin.xlsx"
+    xlsx_path = OUTPUT_DIR / xlsx_name
+    if not xlsx_path.exists() and GDRIVE_FOLDER_ID:
+        try:
+            download_from_drive(xlsx_name, GDRIVE_FOLDER_ID, xlsx_path)
+        except Exception as e:
+            log.warning(f"Could not download {xlsx_name} from Drive: {e}")
 
     xlsx_path = append_to_excel(data, target_date, OUTPUT_DIR)
     log.info(f"Saved Excel: {xlsx_path}")
