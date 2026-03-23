@@ -41,18 +41,24 @@ def main():
 
         xlsx_name = f"{target_date.year}-garmin.xlsx"
         xlsx_path = tmpdir / xlsx_name
+        upload_xlsx = True
         if GDRIVE_FOLDER_ID:
             try:
                 download_from_drive(xlsx_name, GDRIVE_FOLDER_ID, xlsx_path)
             except Exception as e:
-                log.warning(f"Could not download {xlsx_name} from Drive: {e}")
+                log.error(f"Failed to download {xlsx_name} from Drive: {e}")
+                upload_xlsx = False
 
         xlsx_path = append_to_excel(data, target_date, tmpdir)
 
         if GDRIVE_FOLDER_ID:
             upload_to_drive(json_path, GDRIVE_FOLDER_ID)
-            upload_to_drive(xlsx_path, GDRIVE_FOLDER_ID)
-            log.info("Uploaded to Google Drive")
+            log.info("Uploaded json to Google Drive")
+            if upload_xlsx:
+                upload_to_drive(xlsx_path, GDRIVE_FOLDER_ID)
+                log.info("Uploaded xlsx to Google Drive")
+            else:
+                log.error("Skipping xlsx upload to prevent data loss")
 
     send_message(format_summary(data, target_date))
     log.info("Telegram notification sent")
