@@ -1,1 +1,1 @@
-0 0 * * * cd /opt/garmin-agent && /opt/garmin-agent/.venv/bin/python main.py >> /var/log/garmin-agent.log 2>&1
+30 0 * * * cd /opt/garmin-agent && /opt/garmin-agent/.venv/bin/python main.py >> /var/log/garmin-agent.log 2>&1

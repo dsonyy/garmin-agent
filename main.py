@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from datetime import date, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 
 
 def main():
-    target_date = date.today() - timedelta(days=1)
+    target_date = (datetime.now(timezone.utc) - timedelta(days=1)).date()
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     client = init_garmin()
