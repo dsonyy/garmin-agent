@@ -15,6 +15,7 @@ from sheets import append_to_excel, append_to_text_doc, format_summary
 from telegram import send_message
 
 GDRIVE_FOLDER_ID = os.getenv("GDRIVE_FOLDER_ID", "")
+GARMIN_PREFIX = os.getenv("GARMIN_PREFIX", "garmin")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,18 +42,18 @@ def process_day(client, target_date: date, tmpdir: Path, notify: bool = True):
     data = collect_daily_data(client, target_date)
     d = target_date.isoformat()
 
-    json_path = tmpdir / f"{d}-garmin-raw.json"
+    json_path = tmpdir / f"{GARMIN_PREFIX}-{d}.json"
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, default=str, ensure_ascii=False)
 
-    xlsx_name = f"{target_date.year}-garmin.xlsx"
+    xlsx_name = f"{GARMIN_PREFIX}-{target_date.year}.xlsx"
     xlsx_path = tmpdir / xlsx_name
     upload_xlsx = True
     if GDRIVE_FOLDER_ID:
         upload_xlsx = _download_drive_file(xlsx_name, GDRIVE_FOLDER_ID, xlsx_path)
-    xlsx_path = append_to_excel(data, target_date, tmpdir)
+    xlsx_path = append_to_excel(data, target_date, tmpdir, xlsx_name)
 
-    doc_name = f"{target_date.year}-garmin"
+    doc_name = f"{GARMIN_PREFIX}-{target_date.year}"
     txt_path = tmpdir / f"{doc_name}.txt"
     upload_doc = True
     if GDRIVE_FOLDER_ID:

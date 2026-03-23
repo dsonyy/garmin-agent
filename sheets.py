@@ -267,8 +267,8 @@ def append_to_text_doc(data: dict, target_date: date, txt_path: Path) -> Path:
     return txt_path
 
 
-def append_to_excel(data: dict, target_date: date, output_dir: Path) -> Path:
-    xlsx_path = output_dir / f"{target_date.year}-garmin.xlsx"
+def append_to_excel(data: dict, target_date: date, output_dir: Path, filename: str | None = None) -> Path:
+    xlsx_path = output_dir / (filename or f"{target_date.year}-garmin.xlsx")
 
     if xlsx_path.exists():
         wb = load_workbook(xlsx_path)
