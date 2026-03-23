@@ -226,6 +226,47 @@ def format_summary(data: dict, target_date: date) -> str:
     return "\n".join(lines)
 
 
+def _parse_text_doc(text: str) -> dict[str, dict[str, str]]:
+    """Parse text doc into {date_str: {prop: value}}."""
+    entries: dict[str, dict[str, str]] = {}
+    current_date = None
+    for line in text.splitlines():
+        line = line.rstrip()
+        if not line:
+            continue
+        if not line.startswith(" ") and ":" not in line:
+            current_date = line.strip()
+            entries[current_date] = {}
+        elif current_date and ": " in line:
+            key, value = line.split(": ", 1)
+            entries[current_date][key.strip()] = value.strip()
+    return entries
+
+
+def append_to_text_doc(data: dict, target_date: date, txt_path: Path) -> Path:
+    entries: dict[str, dict[str, str]] = {}
+    if txt_path.exists():
+        entries = _parse_text_doc(txt_path.read_text(encoding="utf-8"))
+
+    row = _extract_row(data, target_date)
+    day_props = {}
+    for col, val in zip(COLUMNS[1:], row[1:]):  # skip "date"
+        if val is not None and val != "":
+            day_props[col] = str(val)
+
+    entries[target_date.isoformat()] = day_props
+
+    lines = []
+    for date_str in sorted(entries.keys()):
+        lines.append(date_str)
+        for prop, value in entries[date_str].items():
+            lines.append(f"  {prop}: {value}")
+        lines.append("")
+
+    txt_path.write_text("\n".join(lines), encoding="utf-8")
+    return txt_path
+
+
 def append_to_excel(data: dict, target_date: date, output_dir: Path) -> Path:
     xlsx_path = output_dir / f"{target_date.year}-garmin.xlsx"
 

@@ -10,7 +10,7 @@ load_dotenv()
 
 from garmin import init_garmin, collect_daily_data
 from gdrive import upload_to_drive, download_from_drive
-from sheets import append_to_excel, format_summary
+from sheets import append_to_excel, append_to_text_doc, format_summary
 from telegram import send_message
 
 GDRIVE_FOLDER_ID = os.getenv("GDRIVE_FOLDER_ID", "")
@@ -51,6 +51,18 @@ def main():
 
         xlsx_path = append_to_excel(data, target_date, tmpdir)
 
+        txt_name = f"{target_date.year}-garmin.txt"
+        txt_path = tmpdir / txt_name
+        upload_txt = True
+        if GDRIVE_FOLDER_ID:
+            try:
+                download_from_drive(txt_name, GDRIVE_FOLDER_ID, txt_path)
+            except Exception as e:
+                log.error(f"Failed to download {txt_name} from Drive: {e}")
+                upload_txt = False
+
+        txt_path = append_to_text_doc(data, target_date, txt_path)
+
         if GDRIVE_FOLDER_ID:
             upload_to_drive(json_path, GDRIVE_FOLDER_ID)
             log.info("Uploaded json to Google Drive")
@@ -59,6 +71,11 @@ def main():
                 log.info("Uploaded xlsx to Google Drive")
             else:
                 log.error("Skipping xlsx upload to prevent data loss")
+            if upload_txt:
+                upload_to_drive(txt_path, GDRIVE_FOLDER_ID)
+                log.info("Uploaded txt to Google Drive")
+            else:
+                log.error("Skipping txt upload to prevent data loss")
 
     send_message(format_summary(data, target_date))
     log.info("Telegram notification sent")
