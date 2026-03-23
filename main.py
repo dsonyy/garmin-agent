@@ -1,8 +1,9 @@
+import argparse
 import json
 import logging
 import os
 import tempfile
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -25,60 +26,82 @@ logging.getLogger("garth").setLevel(logging.WARNING)
 log = logging.getLogger(__name__)
 
 
-def main():
-    target_date = (datetime.now(timezone.utc) - timedelta(days=1)).date()
+def _download_drive_file(name: str, folder_id: str, local_path: Path) -> bool:
+    """Download a file from Drive. Returns True if safe to upload back."""
+    try:
+        download_from_drive(name, folder_id, local_path)
+        return True
+    except Exception as e:
+        log.error(f"Failed to download {name} from Drive: {e}")
+        return False
 
-    client = init_garmin()
+
+def process_day(client, target_date: date, tmpdir: Path, notify: bool = True):
+    """Collect data for a single day, update Drive files."""
     data = collect_daily_data(client, target_date)
+    d = target_date.isoformat()
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir = Path(tmpdir)
-        d = target_date.isoformat()
+    json_path = tmpdir / f"{d}-garmin-raw.json"
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, default=str, ensure_ascii=False)
 
-        json_path = tmpdir / f"{d}-garmin-raw.json"
-        with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, default=str, ensure_ascii=False)
+    xlsx_name = f"{target_date.year}-garmin.xlsx"
+    xlsx_path = tmpdir / xlsx_name
+    upload_xlsx = True
+    if GDRIVE_FOLDER_ID:
+        upload_xlsx = _download_drive_file(xlsx_name, GDRIVE_FOLDER_ID, xlsx_path)
+    xlsx_path = append_to_excel(data, target_date, tmpdir)
 
-        xlsx_name = f"{target_date.year}-garmin.xlsx"
-        xlsx_path = tmpdir / xlsx_name
-        upload_xlsx = True
-        if GDRIVE_FOLDER_ID:
-            try:
-                download_from_drive(xlsx_name, GDRIVE_FOLDER_ID, xlsx_path)
-            except Exception as e:
-                log.error(f"Failed to download {xlsx_name} from Drive: {e}")
-                upload_xlsx = False
+    txt_name = f"{target_date.year}-garmin.txt"
+    txt_path = tmpdir / txt_name
+    upload_txt = True
+    if GDRIVE_FOLDER_ID:
+        upload_txt = _download_drive_file(txt_name, GDRIVE_FOLDER_ID, txt_path)
+    txt_path = append_to_text_doc(data, target_date, txt_path)
 
-        xlsx_path = append_to_excel(data, target_date, tmpdir)
+    if GDRIVE_FOLDER_ID:
+        upload_to_drive(json_path, GDRIVE_FOLDER_ID)
+        log.info(f"[{d}] Uploaded json to Google Drive")
+        if upload_xlsx:
+            upload_to_drive(xlsx_path, GDRIVE_FOLDER_ID)
+            log.info(f"[{d}] Uploaded xlsx to Google Drive")
+        else:
+            log.error(f"[{d}] Skipping xlsx upload to prevent data loss")
+        if upload_txt:
+            upload_to_drive(txt_path, GDRIVE_FOLDER_ID)
+            log.info(f"[{d}] Uploaded txt to Google Drive")
+        else:
+            log.error(f"[{d}] Skipping txt upload to prevent data loss")
 
-        txt_name = f"{target_date.year}-garmin.txt"
-        txt_path = tmpdir / txt_name
-        upload_txt = True
-        if GDRIVE_FOLDER_ID:
-            try:
-                download_from_drive(txt_name, GDRIVE_FOLDER_ID, txt_path)
-            except Exception as e:
-                log.error(f"Failed to download {txt_name} from Drive: {e}")
-                upload_txt = False
+    if notify:
+        send_message(format_summary(data, target_date))
+        log.info(f"[{d}] Telegram notification sent")
 
-        txt_path = append_to_text_doc(data, target_date, txt_path)
 
-        if GDRIVE_FOLDER_ID:
-            upload_to_drive(json_path, GDRIVE_FOLDER_ID)
-            log.info("Uploaded json to Google Drive")
-            if upload_xlsx:
-                upload_to_drive(xlsx_path, GDRIVE_FOLDER_ID)
-                log.info("Uploaded xlsx to Google Drive")
-            else:
-                log.error("Skipping xlsx upload to prevent data loss")
-            if upload_txt:
-                upload_to_drive(txt_path, GDRIVE_FOLDER_ID)
-                log.info("Uploaded txt to Google Drive")
-            else:
-                log.error("Skipping txt upload to prevent data loss")
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--since", type=str, help="Backfill from this date (YYYY-MM-DD) to yesterday")
+    args = parser.parse_args()
 
-    send_message(format_summary(data, target_date))
-    log.info("Telegram notification sent")
+    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).date()
+    client = init_garmin()
+
+    if args.since:
+        start = date.fromisoformat(args.since)
+        days = []
+        d = start
+        while d <= yesterday:
+            days.append(d)
+            d += timedelta(days=1)
+        log.info(f"Backfilling {len(days)} days from {start} to {yesterday}")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            for day in days:
+                process_day(client, day, tmpdir, notify=False)
+    else:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            process_day(client, yesterday, tmpdir, notify=True)
 
 
 if __name__ == "__main__":
