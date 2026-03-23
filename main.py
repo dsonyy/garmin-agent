@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -12,7 +13,6 @@ from gdrive import upload_to_drive, download_from_drive
 from sheets import append_to_excel, format_summary
 from telegram import send_message
 
-OUTPUT_DIR = Path(os.getenv("GARMIN_OUTPUT_DIR", str(Path(__file__).parent / "output")))
 GDRIVE_FOLDER_ID = os.getenv("GDRIVE_FOLDER_ID", "")
 
 logging.basicConfig(
@@ -27,36 +27,32 @@ log = logging.getLogger(__name__)
 
 def main():
     target_date = (datetime.now(timezone.utc) - timedelta(days=1)).date()
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     client = init_garmin()
     data = collect_daily_data(client, target_date)
 
-    d = target_date.isoformat()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+        d = target_date.isoformat()
 
-    json_path = OUTPUT_DIR / f"{d}-garmin-raw.json"
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, default=str, ensure_ascii=False)
-    log.info(f"Saved JSON: {json_path}")
+        json_path = tmpdir / f"{d}-garmin-raw.json"
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, default=str, ensure_ascii=False)
 
-    xlsx_name = f"{target_date.year}-garmin.xlsx"
-    xlsx_path = OUTPUT_DIR / xlsx_name
-    if not xlsx_path.exists() and GDRIVE_FOLDER_ID:
-        try:
-            download_from_drive(xlsx_name, GDRIVE_FOLDER_ID, xlsx_path)
-        except Exception as e:
-            log.warning(f"Could not download {xlsx_name} from Drive: {e}")
+        xlsx_name = f"{target_date.year}-garmin.xlsx"
+        xlsx_path = tmpdir / xlsx_name
+        if GDRIVE_FOLDER_ID:
+            try:
+                download_from_drive(xlsx_name, GDRIVE_FOLDER_ID, xlsx_path)
+            except Exception as e:
+                log.warning(f"Could not download {xlsx_name} from Drive: {e}")
 
-    xlsx_path = append_to_excel(data, target_date, OUTPUT_DIR)
-    log.info(f"Saved Excel: {xlsx_path}")
+        xlsx_path = append_to_excel(data, target_date, tmpdir)
 
-    if GDRIVE_FOLDER_ID:
-        try:
+        if GDRIVE_FOLDER_ID:
             upload_to_drive(json_path, GDRIVE_FOLDER_ID)
             upload_to_drive(xlsx_path, GDRIVE_FOLDER_ID)
             log.info("Uploaded to Google Drive")
-        except Exception as e:
-            log.error(f"Google Drive upload failed: {e}")
 
     send_message(format_summary(data, target_date))
     log.info("Telegram notification sent")
