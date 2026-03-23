@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from garmin import init_garmin, collect_daily_data
-from gdrive import upload_to_drive, download_from_drive
+from gdrive import upload_to_drive, download_from_drive, upload_google_doc, download_google_doc
 from sheets import append_to_excel, append_to_text_doc, format_summary
 from telegram import send_message
 
@@ -52,11 +52,15 @@ def process_day(client, target_date: date, tmpdir: Path, notify: bool = True):
         upload_xlsx = _download_drive_file(xlsx_name, GDRIVE_FOLDER_ID, xlsx_path)
     xlsx_path = append_to_excel(data, target_date, tmpdir)
 
-    txt_name = f"{target_date.year}-garmin.txt"
-    txt_path = tmpdir / txt_name
-    upload_txt = True
+    doc_name = f"{target_date.year}-garmin"
+    txt_path = tmpdir / f"{doc_name}.txt"
+    upload_doc = True
     if GDRIVE_FOLDER_ID:
-        upload_txt = _download_drive_file(txt_name, GDRIVE_FOLDER_ID, txt_path)
+        try:
+            download_google_doc(doc_name, GDRIVE_FOLDER_ID, txt_path)
+        except Exception as e:
+            log.error(f"Failed to download Google Doc '{doc_name}': {e}")
+            upload_doc = False
     txt_path = append_to_text_doc(data, target_date, txt_path)
 
     if GDRIVE_FOLDER_ID:
@@ -67,11 +71,11 @@ def process_day(client, target_date: date, tmpdir: Path, notify: bool = True):
             log.info(f"[{d}] Uploaded xlsx to Google Drive")
         else:
             log.error(f"[{d}] Skipping xlsx upload to prevent data loss")
-        if upload_txt:
-            upload_to_drive(txt_path, GDRIVE_FOLDER_ID)
-            log.info(f"[{d}] Uploaded txt to Google Drive")
+        if upload_doc:
+            upload_google_doc(txt_path, doc_name, GDRIVE_FOLDER_ID)
+            log.info(f"[{d}] Uploaded Google Doc to Drive")
         else:
-            log.error(f"[{d}] Skipping txt upload to prevent data loss")
+            log.error(f"[{d}] Skipping Google Doc upload to prevent data loss")
 
     if notify:
         send_message(format_summary(data, target_date))

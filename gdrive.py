@@ -63,6 +63,44 @@ def download_from_drive(filename: str, folder_id: str, local_path: Path | str) -
     return True
 
 
+def download_google_doc(doc_name: str, folder_id: str, local_path: Path | str) -> bool:
+    """Download a native Google Doc as plain text."""
+    service = _get_service()
+    file_id = _find_existing_file(service, doc_name, folder_id)
+    if not file_id:
+        return False
+    content = service.files().export(fileId=file_id, mimeType="text/plain").execute()
+    Path(local_path).write_bytes(content)
+    log.info(f"Exported Google Doc '{doc_name}' from Drive")
+    return True
+
+
+def upload_google_doc(file_path: Path | str, doc_name: str, folder_id: str) -> str:
+    """Upload/update a text file as a native Google Doc."""
+    file_path = Path(file_path)
+    service = _get_service()
+    media = MediaFileUpload(str(file_path), mimetype="text/plain", resumable=True)
+
+    existing_id = _find_existing_file(service, doc_name, folder_id)
+
+    if existing_id:
+        service.files().update(fileId=existing_id, media_body=media).execute()
+        log.info(f"Updated Google Doc '{doc_name}' (ID: {existing_id})")
+        return existing_id
+    else:
+        file_metadata = {
+            "name": doc_name,
+            "parents": [folder_id],
+            "mimeType": "application/vnd.google-apps.document",
+        }
+        file = service.files().create(
+            body=file_metadata, media_body=media, fields="id"
+        ).execute()
+        file_id = file.get("id")
+        log.info(f"Created Google Doc '{doc_name}' (ID: {file_id})")
+        return file_id
+
+
 def upload_to_drive(file_path: Path | str, folder_id: str) -> str:
     file_path = Path(file_path)
     service = _get_service()
