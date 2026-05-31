@@ -72,6 +72,111 @@ COLUMNS = [
     "chronological_age",
 ]
 
+ACTIVITY_COLUMNS = [
+    "activity_count",
+    "activity_sports",
+    "activity_distance_m",
+    "activity_duration_sec",
+    "activity_calories",
+    "activity_training_load",
+    "activity_aerobic_te",
+    "activity_anaerobic_te",
+    "primary_sport",
+    "primary_name",
+    "primary_start",
+    "primary_distance_m",
+    "primary_duration_sec",
+    "primary_moving_sec",
+    "primary_avg_hr",
+    "primary_max_hr",
+    "primary_calories",
+    "primary_avg_speed_mps",
+    "primary_max_speed_mps",
+    "primary_elevation_gain_m",
+    "primary_elevation_loss_m",
+    "primary_avg_cadence",
+    "primary_avg_power",
+    "primary_norm_power",
+    "primary_training_load",
+    "primary_te_label",
+    "primary_hr_zone1_sec",
+    "primary_hr_zone2_sec",
+    "primary_hr_zone3_sec",
+    "primary_hr_zone4_sec",
+    "primary_hr_zone5_sec",
+    "primary_lap_count",
+    "primary_location",
+]
+
+COLUMNS = COLUMNS + ACTIVITY_COLUMNS
+
+
+def _activity_values(data: dict) -> list:
+    """Aggregate activity metrics for the day plus detail for the primary activity.
+
+    Primary = longest activity by duration. Prefers the rich `activities`
+    (get_activities_by_date) source; falls back to the lean `activities_for_date`.
+    """
+    acts = data.get("activities")
+    if not isinstance(acts, list) or not acts:
+        acts = data.get("activities_for_date")
+    acts = [a for a in acts if isinstance(a, dict)] if isinstance(acts, list) else []
+
+    if not acts:
+        return [None] * len(ACTIVITY_COLUMNS)
+
+    sports: list[str] = []
+    for a in acts:
+        sp = _safe_get(a, "activityType", "typeKey")
+        if sp and sp not in sports:
+            sports.append(sp)
+
+    def _sum(key):
+        vals = [a.get(key) for a in acts if a.get(key) is not None]
+        return round(sum(vals), 2) if vals else None
+
+    def _max(key):
+        vals = [a.get(key) for a in acts if a.get(key) is not None]
+        return max(vals) if vals else None
+
+    p = max(acts, key=lambda a: a.get("duration") or 0)
+
+    return [
+        len(acts),
+        ", ".join(sports) if sports else None,
+        _sum("distance"),
+        _sum("duration"),
+        _sum("calories"),
+        _sum("activityTrainingLoad"),
+        _max("aerobicTrainingEffect"),
+        _max("anaerobicTrainingEffect"),
+        _safe_get(p, "activityType", "typeKey"),
+        p.get("activityName"),
+        p.get("startTimeLocal"),
+        p.get("distance"),
+        p.get("duration"),
+        p.get("movingDuration"),
+        p.get("averageHR"),
+        p.get("maxHR"),
+        p.get("calories"),
+        p.get("averageSpeed"),
+        p.get("maxSpeed"),
+        p.get("elevationGain"),
+        p.get("elevationLoss"),
+        p.get("averageRunningCadenceInStepsPerMinute"),
+        p.get("avgPower"),
+        p.get("normPower"),
+        p.get("activityTrainingLoad"),
+        p.get("trainingEffectLabel"),
+        p.get("hrTimeInZone_1"),
+        p.get("hrTimeInZone_2"),
+        p.get("hrTimeInZone_3"),
+        p.get("hrTimeInZone_4"),
+        p.get("hrTimeInZone_5"),
+        p.get("lapCount"),
+        p.get("locationName"),
+    ]
+
 
 def _extract_row(data: dict, target_date: date) -> list:
     d = target_date.isoformat()
@@ -171,7 +276,7 @@ def _extract_row(data: dict, target_date: date) -> list:
         ts.get("trainingStatusPhrase") or ts.get("currentTrainingStatus"),
         fa.get("fitnessAge"),
         fa.get("chronologicalAge"),
-    ]
+    ] + _activity_values(data)
 
 
 def _hm(seconds) -> str:
@@ -223,6 +328,17 @@ def format_summary(data: dict, target_date: date) -> str:
     if v["weight_kg"]:
         lines.append(f"Weight: {v['weight_kg']:.1f} kg")
 
+    if v.get("activity_count"):
+        lines.append("")
+        lines.append(f"Activities: {v['activity_count']} ({v.get('activity_sports') or ''})")
+        load = v.get("primary_training_load")
+        lines.append(
+            f"  {v.get('primary_name') or v.get('primary_sport') or 'activity'}: "
+            f"{_hm(v.get('primary_duration_sec'))}, {_km(v.get('primary_distance_m'))}, "
+            f"{int(v.get('primary_calories') or 0)} kcal"
+            + (f", load {round(load)}" if load else "")
+        )
+
     return "\n".join(lines)
 
 
@@ -273,6 +389,10 @@ def append_to_excel(data: dict, target_date: date, output_dir: Path, filename: s
     if xlsx_path.exists():
         wb = load_workbook(xlsx_path)
         ws = wb.active
+        header = [c.value for c in ws[1]]
+        if header != COLUMNS:
+            for idx, col in enumerate(COLUMNS, start=1):
+                ws.cell(row=1, column=idx, value=col)
         existing_dates = set()
         for row in ws.iter_rows(min_row=2, max_col=1, values_only=True):
             if row[0]:

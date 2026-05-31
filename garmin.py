@@ -105,6 +105,7 @@ def collect_daily_data(client: Garmin, target_date: date) -> dict:
         "blood_pressure": ("get_blood_pressure", [week_ago, d]),
         "hydration": ("get_hydration_data", [d]),
         "activities_for_date": ("get_activities_fordate", [d]),
+        "activities": ("get_activities_by_date", [d, d]),
     }
 
     for key, (method, args) in all_calls.items():
