@@ -34,7 +34,8 @@ def init_garmin() -> Garmin:
 
     client = Garmin(email=GARMIN_EMAIL, password=GARMIN_PASSWORD, is_cn=False)
     client.login()
-    client.garth.dump(str(token_path))
+    token_path.mkdir(parents=True, exist_ok=True)
+    client.garth.dump(str(token_path)) if hasattr(client, "garth") else client.client.dump(str(token_path))
     log.info("Authenticated via credentials, tokens saved")
     return client
 
