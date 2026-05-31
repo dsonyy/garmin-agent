@@ -5,3 +5,5 @@ garminoutput
 .env
 .claude
 __pycache__
+*.log
+output
