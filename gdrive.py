@@ -52,6 +52,28 @@ def _find_existing_file(service, filename: str, folder_id: str) -> str | None:
     return files[0]["id"] if files else None
 
 
+def list_drive_files(folder_id: str, name_contains: str = "") -> list[str]:
+    """List file names in a Drive folder, optionally filtered by substring."""
+    service = _get_service()
+    query = f"'{folder_id}' in parents and trashed = false"
+    if name_contains:
+        query += f" and name contains '{name_contains}'"
+    names: list[str] = []
+    page_token = None
+    while True:
+        results = service.files().list(
+            q=query,
+            fields="nextPageToken, files(name)",
+            pageSize=1000,
+            pageToken=page_token,
+        ).execute()
+        names.extend(f["name"] for f in results.get("files", []))
+        page_token = results.get("nextPageToken")
+        if not page_token:
+            break
+    return names
+
+
 def download_from_drive(filename: str, folder_id: str, local_path: Path | str) -> bool:
     service = _get_service()
     file_id = _find_existing_file(service, filename, folder_id)

@@ -2,6 +2,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import tempfile
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -10,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from garmin import init_garmin, collect_daily_data
-from gdrive import upload_to_drive, download_from_drive, upload_google_doc, download_google_doc
+from gdrive import upload_to_drive, download_from_drive, upload_google_doc, download_google_doc, list_drive_files
 from sheets import append_to_excel, append_to_text_doc, format_summary
 from telegram import send_message
 
@@ -35,6 +36,27 @@ def _download_drive_file(name: str, folder_id: str, local_path: Path) -> bool:
     except Exception as e:
         log.error(f"Failed to download {name} from Drive: {e}")
         return False
+
+
+def last_processed_date() -> date | None:
+    """Find the most recent day already uploaded to Drive, from daily json filenames."""
+    if not GDRIVE_FOLDER_ID:
+        return None
+    try:
+        names = list_drive_files(GDRIVE_FOLDER_ID, name_contains=f"{GARMIN_PREFIX}-")
+    except Exception as e:
+        log.error(f"Failed to list Drive files: {e}")
+        return None
+    pattern = re.compile(rf"^{re.escape(GARMIN_PREFIX)}-(\d{{4}}-\d{{2}}-\d{{2}})\.json$")
+    dates = []
+    for name in names:
+        m = pattern.match(name)
+        if m:
+            try:
+                dates.append(date.fromisoformat(m.group(1)))
+            except ValueError:
+                pass
+    return max(dates) if dates else None
 
 
 def process_day(client, target_date: date, tmpdir: Path, notify: bool = True):
@@ -89,24 +111,34 @@ def main():
     args = parser.parse_args()
 
     yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).date()
-    client = init_garmin()
 
     if args.since:
         start = date.fromisoformat(args.since)
-        days = []
-        d = start
-        while d <= yesterday:
-            days.append(d)
-            d += timedelta(days=1)
-        log.info(f"Backfilling {len(days)} days from {start} to {yesterday}")
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir = Path(tmpdir)
-            for day in days:
-                process_day(client, day, tmpdir, notify=False)
     else:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir = Path(tmpdir)
-            process_day(client, yesterday, tmpdir, notify=True)
+        last = last_processed_date()
+        if last:
+            start = last + timedelta(days=1)
+            log.info(f"Last processed day on Drive: {last}, resuming from {start}")
+        else:
+            start = yesterday
+            log.info("No prior data on Drive, processing yesterday only")
+
+    if start > yesterday:
+        log.info(f"Already up to date (last data {start - timedelta(days=1)}), nothing to do")
+        return
+
+    days = []
+    d = start
+    while d <= yesterday:
+        days.append(d)
+        d += timedelta(days=1)
+
+    client = init_garmin()
+    log.info(f"Processing {len(days)} day(s) from {start} to {yesterday}")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+        for day in days:
+            process_day(client, day, tmpdir, notify=(day == yesterday))
 
 
 if __name__ == "__main__":
