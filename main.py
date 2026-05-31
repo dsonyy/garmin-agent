@@ -38,25 +38,34 @@ def _download_drive_file(name: str, folder_id: str, local_path: Path) -> bool:
         return False
 
 
-def last_processed_date() -> date | None:
-    """Find the most recent day already uploaded to Drive, from daily json filenames."""
+def existing_json_dates() -> set[date]:
+    """Dates already uploaded to Drive, parsed from daily json filenames."""
     if not GDRIVE_FOLDER_ID:
-        return None
+        return set()
     try:
         names = list_drive_files(GDRIVE_FOLDER_ID, name_contains=f"{GARMIN_PREFIX}-")
     except Exception as e:
         log.error(f"Failed to list Drive files: {e}")
-        return None
+        return set()
     pattern = re.compile(rf"^{re.escape(GARMIN_PREFIX)}-(\d{{4}}-\d{{2}}-\d{{2}})\.json$")
-    dates = []
+    dates: set[date] = set()
     for name in names:
         m = pattern.match(name)
         if m:
             try:
-                dates.append(date.fromisoformat(m.group(1)))
+                dates.add(date.fromisoformat(m.group(1)))
             except ValueError:
                 pass
-    return max(dates) if dates else None
+    return dates
+
+
+def _daterange(start: date, end: date) -> list[date]:
+    days = []
+    d = start
+    while d <= end:
+        days.append(d)
+        d += timedelta(days=1)
+    return days
 
 
 def process_day(client, target_date: date, tmpdir: Path, notify: bool = True):
@@ -114,27 +123,29 @@ def main():
 
     if args.since:
         start = date.fromisoformat(args.since)
+        days = _daterange(start, yesterday)
+        log.info(f"Backfilling {len(days)} day(s) from {start} to {yesterday}")
     else:
-        last = last_processed_date()
-        if last:
-            start = last + timedelta(days=1)
-            log.info(f"Last processed day on Drive: {last}, resuming from {start}")
+        existing = existing_json_dates()
+        if existing:
+            # Fill every gap from the earliest known day through yesterday, so a
+            # stray newer file can't mask missing days in between.
+            floor = min(existing)
+            days = [d for d in _daterange(floor, yesterday) if d not in existing]
+            log.info(
+                f"Drive has {len(existing)} day(s) from {floor} to {max(existing)}; "
+                f"{len(days)} day(s) missing through {yesterday}"
+            )
         else:
-            start = yesterday
+            days = [yesterday]
             log.info("No prior data on Drive, processing yesterday only")
 
-    if start > yesterday:
-        log.info(f"Already up to date (last data {start - timedelta(days=1)}), nothing to do")
+    if not days:
+        log.info("Already up to date, nothing to do")
         return
 
-    days = []
-    d = start
-    while d <= yesterday:
-        days.append(d)
-        d += timedelta(days=1)
-
     client = init_garmin()
-    log.info(f"Processing {len(days)} day(s) from {start} to {yesterday}")
+    log.info(f"Processing {len(days)} day(s)")
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
         for day in days:

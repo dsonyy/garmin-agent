@@ -15,7 +15,7 @@ CLIENT_SECRET_FILE = os.getenv(
     str(Path(__file__).parent / "client_secret.json"),
 )
 TOKEN_FILE = str(Path(__file__).parent / "secrets" / "gdrive_token.json")
-SCOPES = ["https://www.googleapis.com/auth/drive.file"]
+SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 _service = None
 
@@ -47,9 +47,29 @@ def _get_service():
 
 def _find_existing_file(service, filename: str, folder_id: str) -> str | None:
     query = f"name = '{filename}' and '{folder_id}' in parents and trashed = false"
-    results = service.files().list(q=query, fields="files(id, name)").execute()
+    results = service.files().list(
+        q=query, fields="files(id, name)", orderBy="createdTime"
+    ).execute()
     files = results.get("files", [])
     return files[0]["id"] if files else None
+
+
+def find_drive_files(filename: str, folder_id: str) -> list[dict]:
+    """Return all matching files (id, name, size, createdTime) for cleanup/inspection."""
+    service = _get_service()
+    query = f"name = '{filename}' and '{folder_id}' in parents and trashed = false"
+    results = service.files().list(
+        q=query,
+        fields="files(id, name, size, createdTime, mimeType)",
+        orderBy="createdTime",
+    ).execute()
+    return results.get("files", [])
+
+
+def delete_drive_file(file_id: str) -> None:
+    service = _get_service()
+    service.files().delete(fileId=file_id).execute()
+    log.info(f"Deleted Drive file {file_id}")
 
 
 def list_drive_files(folder_id: str, name_contains: str = "") -> list[str]:
