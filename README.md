@@ -27,7 +27,7 @@ Telegram notification is sent only for yesterday, not for backfilled days.
 - Python 3.12+ and [uv](https://docs.astral.sh/uv/)
 - A Garmin Connect account
 - A Google Cloud OAuth client (Desktop) with the Drive API enabled
-- A Telegram bot token and chat id
+- (Optional) A Telegram bot token and chat id
 
 ## Setup
 
@@ -52,7 +52,7 @@ GARMIN_TOKEN_DIR="./secrets"
 GARMIN_PREFIX="garmin"
 ```
 
-## First run authorization
+## First run
 
 Two credentials are established on first use and then cached:
 
@@ -69,13 +69,13 @@ uv run main.py
 
 ## Usage
 
-Normal run (auto-resume from last processed day, notify for yesterday):
+Normal run - auto-resume from last processed day, and notify for yesterday:
 
 ```
 uv run main.py
 ```
 
-Backfill from an explicit start date through yesterday (no notifications):
+Backfill from an explicit start date through yesterday:
 
 ```
 uv run main.py --since 2026-01-01
@@ -83,25 +83,4 @@ uv run main.py --since 2026-01-01
 
 ## Cron
 
-Run daily at 00:30. The committed `crontab` file targets the VPS path `/opt/garmin-agent`.
-For a different install, point the line at your own path:
-
 See `crontab` file.
-
-Install it for the current user:
-
-```
-crontab crontab
-```
-
-The target day is computed in UTC, so the schedule is timezone independent for which day
-gets exported.
-
-## Files
-
-- `main.py` — entry point, day selection, orchestration
-- `garmin.py` — Garmin Connect auth and data collection
-- `gdrive.py` — Google Drive upload, download, listing
-- `sheets.py` — row extraction, Excel and text-doc writing, Telegram summary formatting
-- `telegram.py` — Telegram Bot API client
-- `backfill.py` — standalone local-only backfill helper (writes to a local output dir)
