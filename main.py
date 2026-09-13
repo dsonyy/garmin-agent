@@ -145,14 +145,15 @@ def main():
         return
 
     client = init_garmin()
-    # A day is only complete once the watch uploaded after it ended; exporting
-    # earlier writes an empty file that the gap check then treats as done.
-    upload_ms = client.get_device_last_used()["lastUsedDeviceUploadTime"]
-    synced_through = datetime.fromtimestamp(upload_ms / 1000, timezone.utc).date()
-    pending = [d for d in days if d >= synced_through]
-    days = [d for d in days if d < synced_through]
+    # Garmin builds the daily summary asynchronously, minutes after the watch
+    # uploads. Exporting before that writes an empty file that the gap check then
+    # treats as done, so recent days without a summary are retried next run.
+    # ponytail: fixed 7-day retry window, days not worn longer ago export empty
+    retry_after = yesterday - timedelta(days=7)
+    pending = [d for d in days if d > retry_after and not client.get_stats(d.isoformat()).get("includesWellnessData")]
+    days = [d for d in days if d not in pending]
     if pending:
-        log.info(f"Watch last synced {synced_through}, skipping {len(pending)} unsynced day(s)")
+        log.info(f"Garmin has no daily summary yet for {', '.join(map(str, pending))}, retrying next run")
     if not days:
         return
 
