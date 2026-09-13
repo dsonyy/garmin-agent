@@ -3,12 +3,11 @@
 Daily export of Garmin Connect health data to Google Drive, with a Telegram summary.
 
 Each run collects one day of metrics (steps, heart rate, sleep, stress, body battery,
-HRV, training readiness, activities, and more) and writes three artifacts to a Drive folder:
+HRV, training readiness, activities, and more) and writes two artifacts to a Drive folder:
 
 - `<prefix>-<date>.json` — full raw export for that day
 - `<prefix>-<year>.xlsx` — one row per day, appended/updated, including sport-activity
   columns (count, sports, totals, and detail for the day's longest activity)
-- `<prefix>-<year>` — native Google Doc, human-readable, one block per day
 
 On a normal run it also sends a Telegram message summarizing the most recent day.
 

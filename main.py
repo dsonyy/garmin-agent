@@ -11,8 +11,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from garmin import init_garmin, collect_daily_data
-from gdrive import upload_to_drive, download_from_drive, upload_google_doc, download_google_doc, list_drive_files
-from sheets import append_to_excel, append_to_text_doc, format_summary
+from gdrive import upload_to_drive, download_from_drive, list_drive_files
+from sheets import append_to_excel, format_summary
 from telegram import send_message
 
 GDRIVE_FOLDER_ID = os.getenv("GDRIVE_FOLDER_ID", "")
@@ -84,17 +84,6 @@ def process_day(client, target_date: date, tmpdir: Path, notify: bool = True):
         upload_xlsx = _download_drive_file(xlsx_name, GDRIVE_FOLDER_ID, xlsx_path)
     xlsx_path = append_to_excel(data, target_date, tmpdir, xlsx_name)
 
-    doc_name = f"{GARMIN_PREFIX}-{target_date.year}"
-    txt_path = tmpdir / f"{doc_name}.txt"
-    upload_doc = True
-    if GDRIVE_FOLDER_ID:
-        try:
-            download_google_doc(doc_name, GDRIVE_FOLDER_ID, txt_path)
-        except Exception as e:
-            log.error(f"Failed to download Google Doc '{doc_name}': {e}")
-            upload_doc = False
-    txt_path = append_to_text_doc(data, target_date, txt_path)
-
     if GDRIVE_FOLDER_ID:
         upload_to_drive(json_path, GDRIVE_FOLDER_ID)
         log.info(f"[{d}] Uploaded json to Google Drive")
@@ -103,11 +92,6 @@ def process_day(client, target_date: date, tmpdir: Path, notify: bool = True):
             log.info(f"[{d}] Uploaded xlsx to Google Drive")
         else:
             log.error(f"[{d}] Skipping xlsx upload to prevent data loss")
-        if upload_doc:
-            upload_google_doc(txt_path, doc_name, GDRIVE_FOLDER_ID)
-            log.info(f"[{d}] Uploaded Google Doc to Drive")
-        else:
-            log.error(f"[{d}] Skipping Google Doc upload to prevent data loss")
 
     if notify:
         send_message(format_summary(data, target_date))
