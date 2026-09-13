@@ -24,18 +24,17 @@ Telegram notification is sent only for yesterday, not for backfilled days.
 
 ## Requirements
 
-- Python 3.12+
+- Python 3.12+ and [uv](https://docs.astral.sh/uv/)
 - A Garmin Connect account
 - A Google Cloud OAuth client (Desktop) with the Drive API enabled
 - A Telegram bot token and chat id
 
 ## Setup
 
-Create a virtual environment and install dependencies:
+Install dependencies into `.venv`:
 
 ```
-python -m venv .venv
-.venv/bin/pip install -r requirements.txt
+uv sync
 ```
 
 Create a `.env` file:
@@ -53,15 +52,6 @@ GARMIN_TOKEN_DIR="./secrets"
 GARMIN_PREFIX="garmin"
 ```
 
-Environment variables:
-
-- `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` — destination for the daily summary.
-- `GDRIVE_CLIENT_SECRET_FILE` — path to the OAuth client JSON downloaded from Google Cloud.
-- `GDRIVE_FOLDER_ID` — target Drive folder id. If unset, files are written locally only.
-- `GARMIN_EMAIL`, `GARMIN_PASSWORD` — used only when no saved token exists.
-- `GARMIN_TOKEN_DIR` — where Garmin auth tokens are cached (default `~/.garminconnect`).
-- `GARMIN_PREFIX` — file-name prefix for all artifacts (default `garmin`).
-
 ## First run authorization
 
 Two credentials are established on first use and then cached:
@@ -74,7 +64,7 @@ Two credentials are established on first use and then cached:
 Run once by hand to complete both:
 
 ```
-.venv/bin/python main.py
+uv run main.py
 ```
 
 ## Usage
@@ -82,13 +72,13 @@ Run once by hand to complete both:
 Normal run (auto-resume from last processed day, notify for yesterday):
 
 ```
-.venv/bin/python main.py
+uv run main.py
 ```
 
 Backfill from an explicit start date through yesterday (no notifications):
 
 ```
-.venv/bin/python main.py --since 2026-01-01
+uv run main.py --since 2026-01-01
 ```
 
 ## Cron
@@ -96,9 +86,7 @@ Backfill from an explicit start date through yesterday (no notifications):
 Run daily at 00:30. The committed `crontab` file targets the VPS path `/opt/garmin-agent`.
 For a different install, point the line at your own path:
 
-```
-30 0 * * * cd /path/to/garmin-agent && /path/to/garmin-agent/.venv/bin/python main.py >> /path/to/garmin-agent/garmin-agent.log 2>&1
-```
+See `crontab` file.
 
 Install it for the current user:
 
