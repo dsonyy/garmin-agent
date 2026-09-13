@@ -145,6 +145,17 @@ def main():
         return
 
     client = init_garmin()
+    # A day is only complete once the watch uploaded after it ended; exporting
+    # earlier writes an empty file that the gap check then treats as done.
+    upload_ms = client.get_device_last_used()["lastUsedDeviceUploadTime"]
+    synced_through = datetime.fromtimestamp(upload_ms / 1000, timezone.utc).date()
+    pending = [d for d in days if d >= synced_through]
+    days = [d for d in days if d < synced_through]
+    if pending:
+        log.info(f"Watch last synced {synced_through}, skipping {len(pending)} unsynced day(s)")
+    if not days:
+        return
+
     log.info(f"Processing {len(days)} day(s)")
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
